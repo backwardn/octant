@@ -15,7 +15,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/gobwas/glob v0.2.3
 	github.com/golang/mock v1.4.3
-	github.com/golang/protobuf v1.3.3
+	github.com/golang/protobuf v1.4.2
 	github.com/google/uuid v1.1.1
 	github.com/googleapis/gnostic v0.4.1
 	github.com/gorilla/handlers v1.4.2
@@ -38,9 +38,9 @@ require (
 	go.uber.org/zap v1.15.0
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	google.golang.org/grpc v1.27.0
-	k8s.io/api v0.19.0-alpha.3
+	k8s.io/api v0.19.0-beta.2
 	k8s.io/apiextensions-apiserver v0.19.0-alpha.3
-	k8s.io/apimachinery v0.19.0-alpha.3
+	k8s.io/apimachinery v0.19.0-beta.2
 	k8s.io/client-go v0.19.0-alpha.3
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.19.0-alpha.3
