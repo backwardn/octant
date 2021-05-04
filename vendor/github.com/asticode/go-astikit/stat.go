@@ -15,16 +15,23 @@ type Stater struct {
 	m       *sync.Mutex // Locks ss
 	period  time.Duration
 	running uint32
-	ss      []stat
+	ss      map[*StatMetadata]StatOptions
 }
 
-// StatsHandleFunc is a method that can handle stats
-type StatsHandleFunc func(stats []Stat)
+// StatOptions represents stat options
+type StatOptions struct {
+	Handler  StatHandler
+	Metadata *StatMetadata
+}
+
+// StatsHandleFunc is a method that can handle stat values
+type StatsHandleFunc func(stats []StatValue)
 
 // StatMetadata represents a stat metadata
 type StatMetadata struct {
 	Description string
 	Label       string
+	Name        string
 	Unit        string
 }
 
@@ -35,15 +42,10 @@ type StatHandler interface {
 	Value(delta time.Duration) interface{}
 }
 
-// Stat represents a stat
-type Stat struct {
-	StatMetadata
+// StatValue represents a stat value
+type StatValue struct {
+	*StatMetadata
 	Value interface{}
-}
-
-type stat struct {
-	h StatHandler
-	m StatMetadata
 }
 
 // StaterOptions represents stater options
@@ -58,6 +60,7 @@ func NewStater(o StaterOptions) *Stater {
 		h:      o.HandleFunc,
 		m:      &sync.Mutex{},
 		period: o.Period,
+		ss:     make(map[*StatMetadata]StatOptions),
 	}
 }
 
@@ -76,13 +79,6 @@ func (s *Stater) Start(ctx context.Context) {
 		// Reset context
 		s.ctx, s.cancel = context.WithCancel(ctx)
 
-		// Start stats
-		s.m.Lock()
-		for _, v := range s.ss {
-			v.h.Start()
-		}
-		s.m.Unlock()
-
 		// Create ticker
 		t := time.NewTicker(s.period)
 		defer t.Stop()
@@ -98,12 +94,12 @@ func (s *Stater) Start(ctx context.Context) {
 				lastStatAt = n
 
 				// Loop through stats
-				var stats []Stat
+				var stats []StatValue
 				s.m.Lock()
 				for _, v := range s.ss {
-					stats = append(stats, Stat{
-						StatMetadata: v.m,
-						Value:        v.h.Value(delta),
+					stats = append(stats, StatValue{
+						StatMetadata: v.Metadata,
+						Value:        v.Handler.Value(delta),
 					})
 				}
 				s.m.Unlock()
@@ -111,26 +107,10 @@ func (s *Stater) Start(ctx context.Context) {
 				// Handle stats
 				go s.h(stats)
 			case <-s.ctx.Done():
-				// Stop stats
-				s.m.Lock()
-				for _, v := range s.ss {
-					v.h.Stop()
-				}
-				s.m.Unlock()
 				return
 			}
 		}
 	}
-}
-
-// AddStat adds a stat
-func (s *Stater) AddStat(m StatMetadata, h StatHandler) {
-	s.m.Lock()
-	defer s.m.Unlock()
-	s.ss = append(s.ss, stat{
-		h: h,
-		m: m,
-	})
 }
 
 // Stop stops the stater
@@ -140,15 +120,22 @@ func (s *Stater) Stop() {
 	}
 }
 
-// StatsMetadata returns the stats metadata
-func (s *Stater) StatsMetadata() (ms []StatMetadata) {
+// AddStats adds stats
+func (s *Stater) AddStats(os ...StatOptions) {
 	s.m.Lock()
 	defer s.m.Unlock()
-	ms = []StatMetadata{}
-	for _, v := range s.ss {
-		ms = append(ms, v.m)
+	for _, o := range os {
+		s.ss[o.Metadata] = o
 	}
-	return
+}
+
+// DelStats deletes stats
+func (s *Stater) DelStats(os ...StatOptions) {
+	s.m.Lock()
+	defer s.m.Unlock()
+	for _, o := range os {
+		delete(s.ss, o.Metadata)
+	}
 }
 
 type durationStat struct {
@@ -227,18 +214,22 @@ type DurationPercentageStat struct {
 // NewDurationPercentageStat creates a new duration percentage stat
 func NewDurationPercentageStat() *DurationPercentageStat {
 	return &DurationPercentageStat{durationStat: newDurationStat(func(d, delta time.Duration) interface{} {
+		if delta == 0 {
+			return 0
+		}
 		return float64(d) / float64(delta) * 100
 	})}
 }
 
 type counterStat struct {
 	c         float64
-	fn        func(c float64, delta time.Duration) interface{}
+	fn        func(c, t float64, delta time.Duration) interface{}
 	isStarted bool
 	m         *sync.Mutex // Locks isStarted
+	t         float64
 }
 
-func newCounterStat(fn func(c float64, delta time.Duration) interface{}) *counterStat {
+func newCounterStat(fn func(c, t float64, delta time.Duration) interface{}) *counterStat {
 	return &counterStat{
 		fn: fn,
 		m:  &sync.Mutex{},
@@ -252,6 +243,7 @@ func (s *counterStat) Add(delta float64) {
 		return
 	}
 	s.c += delta
+	s.t++
 }
 
 func (s *counterStat) Start() {
@@ -259,6 +251,7 @@ func (s *counterStat) Start() {
 	defer s.m.Unlock()
 	s.c = 0
 	s.isStarted = true
+	s.t = 0
 }
 
 func (s *counterStat) Stop() {
@@ -271,18 +264,38 @@ func (s *counterStat) Value(delta time.Duration) interface{} {
 	s.m.Lock()
 	defer s.m.Unlock()
 	c := s.c
+	t := s.t
 	s.c = 0
-	return s.fn(c, delta)
+	s.t = 0
+	return s.fn(c, t, delta)
 }
 
-// CounterAvgStat is an object capable of computing the average value of a counter per second
+// CounterAvgStat is an object capable of computing the average value of a counter
 type CounterAvgStat struct {
 	*counterStat
 }
 
 // NewCounterAvgStat creates a new counter avg stat
 func NewCounterAvgStat() *CounterAvgStat {
-	return &CounterAvgStat{counterStat: newCounterStat(func(c float64, delta time.Duration) interface{} {
+	return &CounterAvgStat{counterStat: newCounterStat(func(c, t float64, delta time.Duration) interface{} {
+		if t == 0 {
+			return 0
+		}
+		return c / t
+	})}
+}
+
+// CounterRateStat is an object capable of computing the average value of a counter per second
+type CounterRateStat struct {
+	*counterStat
+}
+
+// NewCounterRateStat creates a new counter rate stat
+func NewCounterRateStat() *CounterRateStat {
+	return &CounterRateStat{counterStat: newCounterStat(func(c, t float64, delta time.Duration) interface{} {
+		if delta.Seconds() == 0 {
+			return 0
+		}
 		return c / delta.Seconds()
 	})}
 }
