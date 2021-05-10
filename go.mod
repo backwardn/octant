@@ -3,7 +3,7 @@ module github.com/vmware-tanzu/octant
 go 1.13
 
 require (
-	contrib.go.opencensus.io/exporter/jaeger v0.1.0
+	contrib.go.opencensus.io/exporter/jaeger v0.2.1
 	github.com/GeertJohan/go.rice v1.0.0
 	github.com/asticode/go-astikit v0.6.0
 	github.com/asticode/go-astilectron v0.14.2
@@ -15,7 +15,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/gobwas/glob v0.2.3
 	github.com/golang/mock v1.4.3
-	github.com/golang/protobuf v1.3.3
+	github.com/golang/protobuf v1.3.5
 	github.com/google/uuid v1.1.1
 	github.com/googleapis/gnostic v0.4.1
 	github.com/gorilla/handlers v1.4.2
@@ -34,10 +34,10 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.4.0
-	go.opencensus.io v0.22.1
+	go.opencensus.io v0.22.4
 	go.uber.org/zap v1.15.0
-	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
-	google.golang.org/grpc v1.27.0
+	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
+	google.golang.org/grpc v1.28.0
 	k8s.io/api v0.19.0-alpha.3
 	k8s.io/apiextensions-apiserver v0.19.0-alpha.3
 	k8s.io/apimachinery v0.19.0-alpha.3
